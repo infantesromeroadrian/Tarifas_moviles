@@ -1,4 +1,4 @@
- #1.1 INDICE - CONTENIDO
+
 #%%
 print('1. Introduction')
 print('2. Importacion de librerias')
@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random as np
 import scipy as np
+from scipy import stats
 #%% md
 # 1.4 CARGA DE DATOS
 #%%
@@ -84,6 +85,12 @@ plans_data.isnull().sum()
 #%% md
 #Vemos que hay varios datos nulos en el dataset users_data pero observamos que basicamente son todos aquellos que no tienen aun fecha de baja de la tarifa. Por lo que realmente esos datos nulos igualmente si nos aportan informacion. Por lo que vamos a cambiarlos por datos numericos para que nos puedan servir en el analisis futuro.
 #%% md
+## 2.2 REEMPLAZAMIENTO DE DATOS
+#%%
+users_data
+#%%
+users_data['churn_date'].fillna(0, inplace=True)
+#%% md
 #  3. PREPRACION DE DATASETS
 #%% md
 ## 3.1. MESSAGES
@@ -114,16 +121,12 @@ calls_data
 #%% md
 ## 3.3 INTERNET
 #%%
+pd.pivot_table(internet_data, index = ['user_id', 'session_date'], values = ['mb_used'], aggfunc = 'count')
+#%%
 internet_data['session_date'] = pd.to_datetime(internet_data['session_date'], format='%Y-%m-%d')
 internet_data['month'] = internet_data['session_date'].dt.month
 #%%
-internet_data['gb_used'] = internet_data['mb_used'] / 1024 # esto es para pasar de mb a gb
-#%%
-internet_data['gb_used'] = internet_data['gb_used'].apply(np.ceil)
-#%%
 internet_data['day_of_week'] = pd.to_datetime(internet_data['session_date']).dt.day_name()
-#%%
-pd.pivot_table(internet_data, index = ['user_id', 'month'], values = ['gb_used'], aggfunc = 'count')
 #%%
 internet_data
 #%% md
@@ -131,7 +134,7 @@ internet_data
 #%% md
 ## 3.3.1 TABLA DE CONSUMO
 #%%
-consume_table = pd.merge(pd.merge(pd.pivot_table(calls_data, index = ['user_id', 'month'], values = ['duration'], aggfunc = 'sum'), pd.pivot_table(messages_data, index = ['user_id', 'month'], values = ['id'], aggfunc = 'count'), on = ['user_id', 'month'], how = 'outer'), pd.pivot_table(internet_data, index = ['user_id', 'month'], values = ['gb_used'], aggfunc = 'sum'), on = ['user_id', 'month'], how = 'outer').reset_index()
+consume_table = pd.merge(pd.merge(pd.pivot_table(calls_data, index = ['user_id', 'month'], values = ['duration'], aggfunc = 'sum'), pd.pivot_table(messages_data, index = ['user_id', 'month'], values = ['id'], aggfunc = 'count'), on = ['user_id', 'month'], how = 'outer'), pd.pivot_table(internet_data, index = ['user_id', 'month'], values = ['mb_used'], aggfunc = 'sum'), on = ['user_id', 'month'], how = 'outer').reset_index()
 #%%
 consume_table
 #%% md
@@ -143,7 +146,7 @@ users_plans
 #%% md
 ## 3.2.3 TABLA DE CONSUMO DEL USUARIO
 #%%
-users_plans_consume = pd.merge(users_plans, consume_table, on = 'user_id', how = 'left')
+users_plans_consume = pd.merge(users_plans, consume_table, on = 'user_id', how = 'inner')
 #%%
 users_plans_consume
 #%% md
@@ -165,8 +168,6 @@ users_plans_consume['city'].value_counts().plot(kind = 'bar', figsize = (20, 5))
 #%% md
 #Observamos:
 #- La ciudad donde mas clientes tiene nuestra empresa es New York con una clara diferencia del resto.
-##%% md
-
 #%%
 users_plans_consume.groupby('plan')['city'].value_counts()
 #%%
@@ -231,18 +232,16 @@ sns.countplot(x = 'churn_date', data = users_plans_consume[users_plans_consume['
 #- Al igual que en el grafico anterior los abandonos se centran en el ultimo cuarto del año.
 
 #Como conclusiones deberiamos de intentar reforzar la satisfaccion y fidelizacion de los usuarios en el ultimo cuarto del año.
-##%%
-
 #%% md
 # 5.0 ANALISIS DE DATOS COMPLEJOS.
 #%% md
 ## 5.1 ANALISIS DE CONSUMO
 #%%
-users_plans_consume.groupby('plan')['duration', 'id', 'gb_used'].mean()
+users_plans_consume.groupby('plan')['duration', 'id', 'mb_used'].mean()
 #%% md
 #La media de los usuarios de cada plan es muy similar, por lo que no creo que sea un factor determinante para el modelo de predicción
 #%%
-users_plans_consume.groupby('plan')['duration', 'id', 'gb_used'].median()
+users_plans_consume.groupby('plan')['duration', 'id', 'mb_used'].median()
 #%%
 users_plans_consume.corr()
 #%% md
@@ -286,9 +285,9 @@ sns.lineplot(data = users_plans_consume, x = 'month', y = 'id', hue = 'plan')
 #- En el plan ultimate hay 2 picos de uso en el mes 3 y 5 puede ser que en dicho pais en esas fechas sean festivos y por ello el mayor uso de SMS en esas fechas y ademas en esas fechas si vemos una varianza notable.
 #- Por ultimo apartir del mes 8 vemos una unificacion de la varianza de cada plan e incluso aproximamiento en el uso de SMS por ambos usuarios de cada plan.
 #%% md
-## 5.4 - EVOLUCION DE CONSUMO DE GB DURANTE EL AÑO
+## 5.4 - EVOLUCION DE CONSUMO DE MB DURANTE EL AÑO
 #%%
-sns.lineplot(data = users_plans_consume, x = 'month', y = 'gb_used', hue = 'plan')
+sns.lineplot(data = users_plans_consume, x = 'month', y = 'mb_used', hue = 'plan')
 #%% md
 #En este ultimo analisis observamos:
 #- Como hay un incremento notorio del uso de gb del 1er al 2o mes proporcional a cada plan y como se va normalizando hasta final de año.
@@ -296,9 +295,30 @@ sns.lineplot(data = users_plans_consume, x = 'month', y = 'gb_used', hue = 'plan
 #- Otros de los datos que son preocupantes es que ambos usuarios de cada plan desde la 2o mitad del año usan la misma cantidad de datos pese a que los del plan ultimate pagan mas que los del plan surf. Esto puede provocar mas bajas a los largo del año que analizaremos mas adelante.
 #- Por ultimo no vemos un crecimiento en el uso en comparacion de los otros graficos.
 #%% md
-# 6.0 PRUEBA DE HIPOTESIS
+## 5.5 DEUDA CLIENTES
+#%%
+users_plans_consume['excess_messages'] = users_plans_consume['id'] - users_plans_consume['messages_included']
+users_plans_consume['excess_calls'] = users_plans_consume['duration'] - users_plans_consume['minutes_included']
+users_plans_consume['excess_megas'] = users_plans_consume['mb_used'] - users_plans_consume['mb_per_month_included']
 #%% md
-# 6.1 Primera Hipotesis.
+#Construimos una función que reciba como argumento cada fila del dataframe. Cuando se accede a cada fila se transforma en una serie cuyo índice son los mismos nombres de las columnas.
+#%%
+users_plans_consume['payment_plan'] = users_plans_consume['plan'].apply(lambda x: 20 if x == 'surf' else 70)
+#%%
+def excess_dollars(row):
+    if row['plan'] == 'surf':
+        return row['excess_messages'] * 0.03 + row['excess_calls'] * 0.03 + row['excess_megas'] * 10
+    else:
+        return row['excess_messages'] * 0.01 + row['excess_calls'] * 0.01 + row['excess_megas'] * 7
+
+#%%
+users_plans_consume['excess_dollars'] = users_plans_consume.apply(excess_dollars, axis=1)
+#%%
+users_plans_consume
+#%% md
+## Por ultimo tenemos un dataframe que nos aportaria una informacion absoluta de cada uno de los usuarios de cada plan.
+#%% md
+# 6.0 PRUEBA DE HIPOTESIS
 #%% md
 ## 6.1 HAY UNA DIFERENCIA DE INGRESO PROMEDIO USUARIOS ULTIMATE Y SURF.
 #%% md
@@ -309,41 +329,102 @@ sns.lineplot(data = users_plans_consume, x = 'month', y = 'gb_used', hue = 'plan
 #La hipotesis alternativa es:
 
 #H1: el ingreso promedio de los usuarios de surf es diferente al de los usuarios de ultimate en el dataset users_plans_consume
+#%%
+# calculamos la varianza de la dueda de los usuarios de cada plan
+
+users_plans_consume.groupby('plan')['total_debt'].var()
+#%%
+# calculamos el numero de usuarios de cada plan.
+
+users_plans_consume.groupby('plan')['user_id'].count()
+#%%
+# calculamos la varianza de la diferencia entre ambas medias
+
+users_plans_consume.groupby('plan')['total_debt'].var().diff()
+#%%
+# calculamos el estadistico t
+
+users_plans_consume.groupby('plan')['total_debt'].var().diff() / (users_plans_consume.groupby('plan')['total_debt'].var() / users_plans_consume.groupby('plan')['user_id'].count())
+#%%
+# calculamos el p-valor
+
+stats.ttest_ind(users_plans_consume[users_plans_consume['plan'] == 'surf']['total_debt'], users_plans_consume[users_plans_consume['plan'] == 'ultimate']['total_debt'], equal_var=False)
+#%%
+alpha = 0.05
+#%%
+# comprobamos si el p-valor es menor que el nivel de significacion. El nivel de significacion sirve para determinar si la diferencia entre ambas medias es significativa o no
+
+users_plans_consume.groupby('plan')['total_debt'].var().diff() / (users_plans_consume.groupby('plan')['total_debt'].var() / users_plans_consume.groupby('plan')['user_id'].count()) < 0.05
+#%%
+# comprobamos si la diferencia entre ambas medias es mayor que 0
+
+users_plans_consume.groupby('plan')['total_debt'].var().diff() > 0
+#%%
+# comprobamos si el p-valor de los usuarios de surf es menor que el nivel de significacion
+
+stats.ttest_ind(users_plans_consume[users_plans_consume['plan'] == 'surf']['total_debt'], users_plans_consume[users_plans_consume['plan'] == 'ultimate']['total_debt'], equal_var=False)[1] < 0.05
 #%% md
-#Para comprorbar la hipotesis vamos a hacer un test de hipotesis de dos colas con un nivel de significacion del 5% (alpha = 0.05)
-#Ello lo hacemos con la funcion ttest_ind de la libreria scipy.stats
-#%%
-users_plans_consume['income'] = users_plans_consume['duration'] * 0.03 + users_plans_consume['id'] * 0.03 + users_plans_consume['gb_used'] * 10
-#%%
-users_plans_consume
+## Los ingresos promedios de los usuarios de surf son mayores que los del resto de usuarios
 #%% md
-#El income es el total de los minutos, mensajes y gb consumidos por el usuario multiplicado por el precio de cada uno de ellos
-#%%
-users_plans_consume.groupby('plan')['income'].mean()
-#%% md
-#El ingreso promedio de los usuarios de surf es 417 y el de los usuarios de ultimate es 426. Es decir un usuario de surf gasta mas que un usuario de ultimate.
-#%%
-from scipy import stats
-#%%
-stats.ttest_ind(users_plans_consume[users_plans_consume['plan'] == 'surf']['income'], users_plans_consume[users_plans_consume['plan'] == 'ultimate']['income'], equal_var = False)
-#Lo que hace esta funcion es calcular el estadistico t y el p-value de la hipotesis nula de que las medias de los dos grupos son iguales
-#%% md
-#Esto quiere decir que podemos rechazar la hipotesis nula de que las medias de los dos grupos son iguales ya que el p-value es mayor que 0.05 y eso aparece como nan porque el p-value es muy pequeño.
+## Concluimos que la dueda promedio de los usuarios de surf es diferente al de los usuarios de ultimate en el dataset users_debt
+## La hipotesis nula es falsa mientras que la hipotesis alternativa es verdadera
 #%% md
 ## 6.2 HAY UNA DIFERENCIA ENTRE LOS INGRESOS PROMEDIOS DE LOS USUARIOS DE NEW YORK CON EL RESTO DE USUARIOS.
-#%%
-users_plans_consume[users_plans_consume['city'] == 'New York-Newark-Jersey City, NY-NJ-PA MSA']['income'].mean()
-#%%
-users_plans_consume[users_plans_consume['city'] != 'New York-Newark-Jersey City, NY-NJ-PA MSA']['income'].mean()
 #%% md
-#La hipotesis nula es:
-#H0: el ingreso promedio de los usuarios de la ciudad de nueva york no es igual al de los usuarios de otras ciudades en el dataset users_plans_consume
+#Hipotesis nula: los ingresos promedios de los usuarios de new york son iguales a los del resto de usuarios
+#Hipotesis alternativa: los ingresos promedios de los usuarios de new york son diferentes a los del resto de usuarios
 
+#Para comprobar la hipotesis vamos a hacer un test de hipotesis de dos colas con un nivel de significacion del 5% (alpha = 0.05)
+#%%
+# calculamos la deuda promedio de los usuarios de new york
 
-#La hipotesis alternativa es:
-#H1: el ingreso promedio de los usuarios de la ciudad de nueva york es igual al de los usuarios de otras ciudades en el dataset users_plans_consume
+new_york_debt = users_plans_consume.query('city == "New York-Newark-Jersey City, NY-NJ-PA"')['total_debt'].mean()
+
+# calculamos la deuda promedio del resto de usuarios
+
+other_debt_ny = users_plans_consume.query('city != "New York-Newark-Jersey City, NY-NJ-PA"')['total_debt'].mean()
+#%%
+# calculamos la varianza de los ingresos de los usuarios de new york
+
+new_york_debt_var = np.var(users_plans_consume.query('city == "New York-Newark-Jersey City, NY-NJ-PA"')['total_debt'], ddof = 1)
+
+# calculamos la varianza de los ingresos del resto de usuarios
+
+other_debt_var = np.var(users_plans_consume.query('city != "New York-Newark-Jersey City, NY-NJ-PA"')['total_debt'], ddof = 1)
+#%%
+# calculamos la diferencia entre ambas
+
+debt_diff_ny = new_york_debt - other_debt_ny
+#%%
+# calculamos el numero de usuarios de new york
+
+new_york_users = users_plans_consume.query('city == "New York-Newark-Jersey City, NY-NJ-PA"').count()
+
+# calculamos el numero de usuarios de new york
+
+other_users_ny = users_plans_consume.query('city != "New York-Newark-Jersey City, NY-NJ-PA"').count()
+#%%
+# calculamos la varianza de la diferencia entre ambas medias
+
+debt_diff_var_ny = new_york_debt_var / new_york_users + other_debt_var / other_users_ny
+#%%
+# calculamos el estadistico t
+
+t_ny = debt_diff_ny / np.sqrt(debt_diff_var_ny)
+#%%
+# calculamos la p-vale de los usuarios de surf
+
+surf_p_ny = (1 - stats.t.cdf(abs(t_ny), df = new_york_users - 1)) * 2
+
+# calculamos la p-vale de los usuarios de ultimate
+
+ultimate_p_ny = (1 - stats.t.cdf(abs(t_ny), df = other_users_ny - 1)) * 2
 
 #%%
-stats.ttest_ind(users_plans_consume[users_plans_consume['city'] == 'New York-Newark-Jersey City, NY-NJ-PA MSA']['income'], users_plans_consume[users_plans_consume['city'] != 'New York-Newark-Jersey City, NY-NJ-PA MSA']['income'], equal_var = False) # lo que hace esta funcion es calcular el estadistico t y el p-value de la hipotesis nula de que las medias de los dos grupos son iguales
-#%% md
-#Esto quiere decir que podemos rechazar la hipotesis nula de que las medias de los dos grupos difieren ya que el p-value es mayor que 0.05 y eso aparece como nan porque el p-value es muy pequeño
+# comprobamos si la diferencia entre ambas medias es mayor que 0
+
+if debt_diff_ny > 0:
+    print('Los ingresos promedios de los usuarios de new york son mayores que los del resto de usuarios')
+else:
+    print('Los ingresos promedios de los usuarios de new york son menores que los del resto de usuarios')
+    exit()
